@@ -228,7 +228,51 @@ def show_most_common_types(
         file.write('%-*s %i\n' % (width, name, count))
 
 
-def show_growth(limit=10, peak_stats={}, shortnames=True, file=sys.stdout):
+shared_peak_stats = {}
+
+
+def get_growth(limit=10, peak_stats=None, shortnames=True, stats=None):
+    """Get the increase in peak object counts since last call.
+
+    Limits the output to ``limit`` largest deltas.  You may set ``limit`` to
+    None to see all of them.
+
+    Uses and updates global ``shared_peak_stats``, a dictionary from type names
+    to previously seen peak object counts. Can be overridden by ``peak_stats``
+    argument.
+
+    The caveats documented in :func:`typestats` apply.
+
+    Example:
+
+        >>> show_growth()
+        wrapper_descriptor       970       +14
+        tuple                  12282       +10
+        dict                    1922        +7
+        ...
+
+    .. versionadded:: 3.0.1
+
+    """
+    gc.collect()
+    stats = typestats(shortnames=shortnames)
+    deltas = {}
+    if peak_stats is None:
+        global shared_peak_stats
+        peak_stats = shared_peak_stats
+    for name, count in iteritems(stats):
+        old_count = peak_stats.get(name, 0)
+        if count > old_count:
+            deltas[name] = count - old_count
+            peak_stats[name] = count
+    deltas = sorted(deltas.items(), key=operator.itemgetter(1),
+                    reverse=True)
+    if limit:
+        deltas = deltas[:limit]
+    return stats, deltas
+
+
+def show_growth(limit=10, peak_stats=None, shortnames=True, file=sys.stdout):
     """Show the increase in peak object counts since last call.
 
     Limits the output to ``limit`` largest deltas.  You may set ``limit`` to
@@ -256,17 +300,13 @@ def show_growth(limit=10, peak_stats={}, shortnames=True, file=sys.stdout):
     .. versionchanged:: 2.1
        New parameter: ``file``.
 
+    .. versionchanged:: 3.0.1
+       Implemented by calling `get_growth`.
+
     """
-    gc.collect()
-    stats = typestats(shortnames=shortnames)
-    deltas = {}
-    for name, count in iteritems(stats):
-        old_count = peak_stats.get(name, 0)
-        if count > old_count:
-            deltas[name] = count - old_count
-            peak_stats[name] = count
-    deltas = sorted(deltas.items(), key=operator.itemgetter(1),
-                    reverse=True)
+    stats, deltas = get_growth(limit=limit,
+                               peak_stats=peak_stats,
+                               shortnames=shortnames)
     if limit:
         deltas = deltas[:limit]
     if deltas:
